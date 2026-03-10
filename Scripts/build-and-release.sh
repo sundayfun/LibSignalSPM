@@ -297,63 +297,18 @@ find "$NEW_SWIFT_SRC" -name '*.swift' -not -path '*/Tests/*' -exec cp {} "$REPO_
 NEW_SWIFT_COUNT=$(find "$REPO_ROOT/Sources/LibSignalClient" -name '*.swift' | wc -l | tr -d ' ')
 ok "Swift sources updated ($NEW_SWIFT_COUNT files)"
 
-# ── Zip & checksum ──────────────────────────────────────────────────────────
+# ── Replace xcframework ─────────────────────────────────────────────────────
 
-log "Creating release artifact..."
+log "Replacing xcframework..."
+rm -rf "$REPO_ROOT/SignalFfi.xcframework"
+cp -a "$NEW_XCFW" "$REPO_ROOT/SignalFfi.xcframework"
 
-ARTIFACT_DIR="$WORK_DIR/release"
-mkdir -p "$ARTIFACT_DIR"
+DEVICE_SIZE=$(du -sh "$REPO_ROOT/SignalFfi.xcframework/$DEVICE_SLICE/libsignal_ffi.a" | cut -f1)
+SIM_SIZE=$(du -sh "$REPO_ROOT/SignalFfi.xcframework/$SIM_SLICE/libsignal_ffi.a" | cut -f1)
 
-cd "$WORK_DIR"
-zip -r "$ARTIFACT_DIR/SignalFfi.xcframework.zip" SignalFfi.xcframework/
-cd "$REPO_ROOT"
+ok "xcframework replaced (device: $DEVICE_SIZE, sim: $SIM_SIZE)"
 
-CHECKSUM=$(swift package compute-checksum "$ARTIFACT_DIR/SignalFfi.xcframework.zip")
-ZIP_SIZE=$(du -sh "$ARTIFACT_DIR/SignalFfi.xcframework.zip" | cut -f1)
-
-ok "Artifact created: $ZIP_SIZE (checksum: $CHECKSUM)"
-
-# ── Update Package.swift ────────────────────────────────────────────────────
-
-log "Updating Package.swift..."
-
-RELEASE_URL="https://github.com/sundayfun/LibSignalSPM/releases/download/$TAG/SignalFfi.xcframework.zip"
-
-cat > "$REPO_ROOT/Package.swift" <<EOF
-// swift-tools-version: 5.10
-
-import PackageDescription
-
-let package = Package(
-    name: "LibSignalSPM",
-    platforms: [
-        .iOS("18.0"),
-        .macOS(.v14),
-    ],
-    products: [
-        .library(
-            name: "LibSignalClient",
-            targets: ["LibSignalClient"]
-        )
-    ],
-    targets: [
-        .binaryTarget(
-            name: "SignalFfi",
-            url: "$RELEASE_URL",
-            checksum: "$CHECKSUM"
-        ),
-        .target(
-            name: "LibSignalClient",
-            dependencies: ["SignalFfi"],
-            path: "Sources/LibSignalClient"
-        ),
-    ]
-)
-EOF
-
-ok "Package.swift updated"
-
-# ── Commit, tag & release ───────────────────────────────────────────────────
+# ── Commit, tag & push ─────────────────────────────────────────────────────
 
 log "Committing changes..."
 
@@ -367,13 +322,7 @@ git tag "$TAG"
 log "Pushing to origin..."
 git push origin main --tags
 
-log "Creating GitHub release..."
-gh release create "$TAG" \
-    "$ARTIFACT_DIR/SignalFfi.xcframework.zip" \
-    --title "LibSignal $TAG" \
-    --notes "Built from nicegram/nicegram-libsignal $TAG"
-
-ok "Release $TAG published"
+ok "Pushed $TAG"
 
 # ── Summary ──────────────────────────────────────────────────────────────────
 
@@ -381,9 +330,8 @@ echo ""
 printf "${BOLD}═══ LibSignal Release Summary ═══${NC}\n"
 echo "  Tag:          $TAG"
 echo "  Semver:       $SEMVER"
-echo "  Zip size:     $ZIP_SIZE"
-echo "  Checksum:     $CHECKSUM"
+echo "  Device .a:    $DEVICE_SIZE"
+echo "  Simulator .a: $SIM_SIZE"
 echo "  Swift files:  $NEW_SWIFT_COUNT"
-echo "  Release URL:  $RELEASE_URL"
 echo ""
 ok "Done! Update consuming projects to use version $SEMVER"

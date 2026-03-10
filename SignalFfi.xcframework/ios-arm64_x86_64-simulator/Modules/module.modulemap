@@ -1,0 +1,5 @@
+module SignalFfi {
+    header "../Headers/signal_ffi.h"
+    header "../Headers/signal_ffi_testing.h"
+    export *
+}
