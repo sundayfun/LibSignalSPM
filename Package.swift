@@ -5,7 +5,7 @@ import PackageDescription
 let package = Package(
     name: "LibSignalSPM",
     platforms: [
-        .iOS("18.0"),
+        .iOS("15.0"),
         .macOS(.v14),
     ],
     products: [
